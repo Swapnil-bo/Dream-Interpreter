@@ -1,0 +1,31 @@
+{
+    "name": "dream-interpreter",
+    "version": "1.0.0",
+    "description": "ONEIROS — Local-first AI dream interpreter powered by qwen2.5:7b",
+    "type": "module",
+    "scripts": {
+      "dev": "vite",
+      "build": "vite build",
+      "preview": "vite preview",
+      "lint": "eslint src --ext .js,.jsx --report-unused-disable-directives --max-warnings 0"
+    },
+    "dependencies": {
+      "react": "^18.3.1",
+      "react-dom": "^18.3.1",
+      "framer-motion": "^11.3.0",
+      "axios": "^1.7.2",
+      "html2canvas": "^1.4.1",
+      "zustand": "^4.5.4",
+      "clsx": "^2.1.1"
+    },
+    "devDependencies": {
+      "@types/react": "^18.3.3",
+      "@types/react-dom": "^18.3.0",
+      "@vitejs/plugin-react": "^4.3.1",
+      "eslint": "^8.57.0",
+      "eslint-plugin-react": "^7.34.3",
+      "eslint-plugin-react-hooks": "^4.6.2",
+      "eslint-plugin-react-refresh": "^0.4.7",
+      "vite": "^5.3.4"
+    }
+  }
