@@ -2,16 +2,36 @@ import httpx
 import json
 import re
 import asyncio
+import logging
 from typing import Optional
+from pydantic_settings import BaseSettings
 from backend.models.schemas import DreamResponse, Symbol
 
 # ─────────────────────────────────────────────
-# CONFIG
+# LOGGING SETUP
 # ─────────────────────────────────────────────
-OLLAMA_BASE_URL = "http://localhost:11434"
-MODEL = "qwen2.5:7b"
-MAX_RETRIES = 3
-TIMEOUT = 120.0
+logger = logging.getLogger("oneiros")
+logging.basicConfig(
+    level=logging.INFO,
+    format="%(asctime)s [%(name)s] %(levelname)s — %(message)s"
+)
+
+
+# ─────────────────────────────────────────────
+# CONFIG — driven by .env via pydantic-settings
+# ─────────────────────────────────────────────
+class Settings(BaseSettings):
+    ollama_base_url: str = "http://localhost:11434"
+    model: str = "qwen2.5:7b"
+    max_retries: int = 3
+    timeout: float = 120.0
+
+    class Config:
+        env_file = ".env"
+        env_prefix = "ONEIROS_"  # e.g. ONEIROS_MODEL=qwen2.5:14b in .env
+
+settings = Settings()
+
 
 # ─────────────────────────────────────────────
 # SYSTEM PROMPT — the soul of the interpreter
@@ -116,7 +136,10 @@ def build_dream_response(data: dict) -> DreamResponse:
             symbols.append(Symbol(name=s[:100], meaning="Symbol extracted from dream"))
 
     if not symbols:
-        symbols = [Symbol(name="The Dream Itself", meaning="The unconscious speaks in ways that resist easy symbolization.")]
+        symbols = [Symbol(
+            name="The Dream Itself",
+            meaning="The unconscious speaks in ways that resist easy symbolization."
+        )]
 
     # Clamp mood_score to valid range
     raw_score = data.get("mood_score", 0.5)
@@ -144,7 +167,7 @@ async def call_ollama(dream: str) -> dict:
     """Single attempt to call Ollama and get raw response."""
 
     payload = {
-        "model": MODEL,
+        "model": settings.model,
         "messages": [
             {"role": "system", "content": SYSTEM_PROMPT},
             {"role": "user", "content": USER_PROMPT_TEMPLATE.format(dream=dream)}
@@ -158,9 +181,9 @@ async def call_ollama(dream: str) -> dict:
         }
     }
 
-    async with httpx.AsyncClient(timeout=TIMEOUT) as client:
+    async with httpx.AsyncClient(timeout=settings.timeout) as client:
         response = await client.post(
-            f"{OLLAMA_BASE_URL}/api/chat",
+            f"{settings.ollama_base_url}/api/chat",
             json=payload
         )
         response.raise_for_status()
@@ -173,51 +196,53 @@ async def call_ollama(dream: str) -> dict:
 async def interpret_dream(dream: str) -> DreamResponse:
     """
     Interprets a dream using Ollama + qwen2.5:7b.
-    Retries up to MAX_RETRIES times on parse failure.
+    Retries up to max_retries times on parse failure with true exponential backoff.
+    ConnectError is not retried — if Ollama is down, no amount of retrying helps.
     """
     last_error: Optional[Exception] = None
     raw_content: str = ""
 
-    for attempt in range(1, MAX_RETRIES + 1):
+    for attempt in range(1, settings.max_retries + 1):
         try:
-            print(f"[ONEIROS] Attempt {attempt}/{MAX_RETRIES} — interpreting dream...")
+            logger.info(f"Attempt {attempt}/{settings.max_retries} — interpreting dream...")
 
             result = await call_ollama(dream)
             raw_content = result["message"]["content"]
 
-            print(f"[ONEIROS] Raw response received ({len(raw_content)} chars)")
+            logger.info(f"Raw response received ({len(raw_content)} chars)")
 
-            # Extract JSON
             parsed = extract_json(raw_content)
 
             if parsed is None:
                 raise ValueError(f"JSON extraction failed on attempt {attempt}. Raw: {raw_content[:300]}...")
 
-            # Build and validate response
             dream_response = build_dream_response(parsed)
 
-            print(f"[ONEIROS] Dream interpreted successfully. Mood: {dream_response.mood} ({dream_response.mood_score})")
+            logger.info(f"Dream interpreted successfully. Mood: {dream_response.mood} ({dream_response.mood_score})")
             return dream_response
 
         except httpx.ConnectError:
+            # No point retrying — Ollama process is not running at all
             raise ConnectionError(
                 "Cannot connect to Ollama. Make sure Ollama is running: `ollama serve`"
             )
+
         except httpx.HTTPStatusError as e:
+            # HTTP errors (4xx/5xx) from Ollama are not retryable
             raise ConnectionError(f"Ollama returned HTTP {e.response.status_code}")
 
         except (ValueError, KeyError) as e:
             last_error = e
-            print(f"[ONEIROS] Parse error on attempt {attempt}: {e}")
-            if attempt < MAX_RETRIES:
-                wait = attempt * 2  # exponential backoff: 2s, 4s
-                print(f"[ONEIROS] Retrying in {wait}s...")
+            logger.warning(f"Parse error on attempt {attempt}: {e}")
+            if attempt < settings.max_retries:
+                wait = 2 ** attempt  # true exponential backoff: 2s, 4s, 8s...
+                logger.info(f"Retrying in {wait}s...")
                 await asyncio.sleep(wait)
             continue
 
     # All retries exhausted
     raise RuntimeError(
-        f"ONEIROS failed to interpret the dream after {MAX_RETRIES} attempts. "
+        f"ONEIROS failed to interpret the dream after {settings.max_retries} attempts. "
         f"Last error: {last_error}. "
         f"Raw content preview: {raw_content[:500]}"
     )
@@ -230,21 +255,22 @@ async def check_ollama_health() -> dict:
     """Check if Ollama is running and the model is available."""
     try:
         async with httpx.AsyncClient(timeout=10.0) as client:
-            response = await client.get(f"{OLLAMA_BASE_URL}/api/tags")
+            response = await client.get(f"{settings.ollama_base_url}/api/tags")
             response.raise_for_status()
             models = response.json().get("models", [])
             model_names = [m["name"] for m in models]
-            model_available = any(MODEL in name for name in model_names)
+            model_available = any(settings.model in name for name in model_names)
             return {
                 "ollama_running": True,
                 "model_available": model_available,
-                "model": MODEL,
+                "model": settings.model,
                 "available_models": model_names
             }
     except Exception as e:
+        logger.error(f"Ollama health check failed: {e}")
         return {
             "ollama_running": False,
             "model_available": False,
-            "model": MODEL,
+            "model": settings.model,
             "error": str(e)
         }
