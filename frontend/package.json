@@ -13,7 +13,6 @@
       "react": "^18.3.1",
       "react-dom": "^18.3.1",
       "framer-motion": "^11.3.0",
-      "axios": "^1.7.2",
       "html2canvas": "^1.4.1",
       "zustand": "^4.5.4",
       "clsx": "^2.1.1"
