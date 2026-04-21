@@ -292,12 +292,6 @@ If ONEIROS gave you a reading that hit different — screenshot the share card a
 
 ---
 
-## ⟁ License
-
-MIT — use it, fork it, build on it. If you ship something inspired by ONEIROS, I'd love to know.
-
----
-
 <div align="center">
 
 <br />
