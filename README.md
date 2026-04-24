@@ -269,18 +269,6 @@ Most "AI dream interpreters" are thin wrappers around GPT-4 with a purple gradie
 
 ---
 
-## ◈ Built as Part of 100 Days of Vibe Coding
-
-This project is **Day N** of my public #100DaysOfVibeCoding challenge — shipping one AI project every day, building in public, learning by doing.
-
-Follow the journey:
-- **GitHub:** [github.com/Swapnil-bo](https://github.com/Swapnil-bo)
-- **X / Twitter:** [@SwapnilHazra4](https://x.com/SwapnilHazra4)
-
-If ONEIROS gave you a reading that hit different — screenshot the share card and tag me. I want to see what the oracle says to other dreamers.
-
----
-
 ## ◐ Roadmap
 
 - [ ] Streaming response support (watch the analysis appear word by word in real time)
